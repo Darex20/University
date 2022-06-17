@@ -1,0 +1,8 @@
+C:\Users\Dario\Documents\OVO\Lab3\RayTracing_C#\RayTracing\RayTracing\bin\Debug\RayTracing.exe
+C:\Users\Dario\Documents\OVO\Lab3\RayTracing_C#\RayTracing\RayTracing\bin\Debug\RayTracing.pdb
+C:\Users\Dario\Documents\OVO\Lab3\RayTracing_C#\RayTracing\RayTracing\obj\Debug\RayTracing.csproj.AssemblyReference.cache
+C:\Users\Dario\Documents\OVO\Lab3\RayTracing_C#\RayTracing\RayTracing\obj\Debug\RayTracing.csproj.CoreCompileInputs.cache
+C:\Users\Dario\Documents\OVO\Lab3\RayTracing_C#\RayTracing\RayTracing\obj\Debug\RayTracing.exe
+C:\Users\Dario\Documents\OVO\Lab3\RayTracing_C#\RayTracing\RayTracing\obj\Debug\RayTracing.pdb
+C:\Users\Dario\Documents\OVO\Lab3\RayTracing_C#\RayTracing\RayTracing\obj\Debug\raytracing.Picture.resources
+C:\Users\Dario\Documents\OVO\Lab3\RayTracing_C#\RayTracing\RayTracing\obj\Debug\RayTracing.csproj.GenerateResource.cache
