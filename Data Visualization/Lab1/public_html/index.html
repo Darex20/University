@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: space-around; 
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-wrap: wrap;
+        }
+        #genre-chart, #artist-chart {
+            flex-basis: 45%; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        svg {
+            margin: 0 10px; /* Add space around each SVG */
+        }
+        .axis-label {
+        font-size: 14px; /* Adjust the font size as needed */
+        fill: #333; /* Font color */
+        font-weight: bold; /* Make it bold */
+        font-family: 'Arial', sans-serif;
+        }
+
+        .axis text {
+            fill: #666; /* Color of the axis values */
+            font-size: 12px; /* Adjust the font size as needed */
+            font-family: 'Arial', sans-serif; 
+        }
+
+        .axis line,
+        .axis path {
+            stroke: #ccc; /* Color of the axis lines */
+        }
+
+        .axis-label,
+        .artist-chart-label {
+            font-size: 16px; /* Increase font size */
+            fill: #333; /* Font color */
+            font-weight: bold; /* Make it bold */
+            font-family: 'Arial', sans-serif; 
+            dominant-baseline: hanging;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2); 
+        }
+
+        </style>
+
+    <title>D3.js Test</title>
+</head>
+<body>
+    <div id="genre-chart"></div>
+    <div id="artist-chart"></div>
+
+    <script>
+        // Load data from CSV file
+        d3.csv("./static/data/data.csv").then(function(data) {
+
+            console.log("Data:", data);
+
+            const popularSongsData = data.filter(song => song.popularity >= 70);
+
+            // Genre Popularity Bar Chart
+            const genreCounts = d3.rollup(
+                popularSongsData,
+                v => ({
+                    count: v.length,
+                    artists: d3.rollup(v, songs => songs.length, d => d.artists),
+                    maxPopularity: d3.max(v, d => d.popularity),
+                }),
+                (d) => d.track_genre
+            );
+
+            // Function to update the genre chart based on the selected artist
+            function updateGenreChart(selectedArtist) {
+                let updatedData;
+                if (selectedArtist === null) {
+                    // Reset to original data
+                    updatedData = sortedGenres;
+                } else {
+                    // Filter data based on selected artist
+                    let relevantData = popularSongsData.filter(song => song.artists.includes(selectedArtist));
+                    updatedData = d3.rollup(
+                        relevantData,
+                        v => ({
+                            count: v.length,
+                            artists: d3.rollup(v, songs => songs.length, d => d.artists),
+                            maxPopularity: d3.max(v, d => d.popularity),
+                        }),
+                        (d) => d.track_genre
+                    );
+                    updatedData = Array.from(updatedData.entries())
+                        .sort((a, b) => b[1].count - a[1].count)
+                        .slice(-10);
+                }
+
+                const xScaleGenre = d3
+                    .scaleBand()
+                    .domain(sortedGenres.map((d) => d[0]))
+                    .range([0, width])
+                    .padding(0.1);
+
+                const yScaleGenre = d3
+                    .scaleLinear()
+                    .domain([0, d3.max(sortedGenres, (d) => d[1].count)])
+                    .range([height, 0]);
+
+                // Update bars
+                const bars = svgGenre.selectAll("rect")
+                    .data(updatedData, d => d[0]);
+
+                bars.enter()
+                    .append("rect")
+                    .merge(bars)
+                    .transition()  // Add a transition for smoother update
+                    .duration(500) // Duration of transition in milliseconds
+                    .attr("x", (d) => xScaleGenre(d[0]))
+                    .attr("y", (d) => yScaleGenre(d[1].count))
+                    .attr("width", xScaleGenre.bandwidth())
+                    .attr("height", (d) => height - yScaleGenre(d[1].count))
+                    .attr("fill", "url(#genre-gradient)");
+
+                bars.exit().remove(); // Remove any unneeded bars
+
+                // Update axes
+                svgGenre.select(".x-axis").call(d3.axisBottom(xScaleGenre));
+                svgGenre.select(".y-axis").call(d3.axisLeft(yScaleGenre));
+
+                svgGenre.selectAll("rect")
+                .on("mouseover", function(event, d) {
+                    // Extract top artists for the selected genre
+                    d3.select(this)
+                        .style("stroke", "black")
+                        .style("stroke-width", "2px");
+
+                    const selectedGenre = d[0];
+                    const topArtists = Array.from(genreCounts.get(selectedGenre).artists)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([artist, count]) => ({artist, popularity: count}))
+                        .slice(0, 10);
+
+                    // Update artist chart with top artists for the selected genre
+                    updateArtistChart(topArtists);
+                    updateArtistLabel(d[0]);
+                })
+                .on("mouseout", function() {
+                    d3.select(this)
+                        .style("stroke", "none");
+                    // Restore the artist chart to show overall top artists
+                    updateArtistChart(top10OverallArtists.map(([artist, popularity]) => ({artist, popularity})), true);
+                    updateArtistLabel(null);
+                });
+            }
+            
+
+
+            // Sort genres by total popularity
+            const sortedGenres = Array.from(genreCounts.entries())
+                .sort((a, b) => d3.sum(Array.from(a[1].artists.values())) - d3.sum(Array.from(b[1].artists.values())))
+                .slice(-10);
+
+            console.log("Sorted Genres:", sortedGenres);
+
+            const genreChart = d3.select("#genre-chart");
+
+            // Chart dimensions
+            const margin = { top: 30, right: 30, bottom: 120, left: 70 };
+            const width = 600 - margin.left - margin.right;
+            const height = 500 - margin.top - margin.bottom;
+
+            // Create SVG container
+            const svgGenre = genreChart
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            // Create scales
+            const xScaleGenre = d3
+                .scaleBand()
+                .domain(sortedGenres.map((d) => d[0]))
+                .range([0, width])
+                .padding(0.1);
+
+            const yScaleGenre = d3
+                .scaleLinear()
+                .domain([0, d3.max(sortedGenres, (d) => d[1].count)])
+                .range([height, 0]);
+            
+            // Create bars
+            function createGenreBars(){
+                svgGenre
+                    .selectAll("rect")
+                    .data(sortedGenres)
+                    .enter()
+                    .append("rect")
+                    .attr("x", (d) => xScaleGenre(d[0]))
+                    .attr("y", (d) => yScaleGenre(d[1].count))
+                    .attr("width", xScaleGenre.bandwidth())
+                    .attr("height", (d) => height - yScaleGenre(d[1].count))
+                    .attr("fill", "steelblue");
+
+                // Add X and Y axes
+                svgGenre
+                    .append("g")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScaleGenre))
+                    .selectAll("text")
+                    .attr("transform", "rotate(-45)")
+                    .style("text-anchor", "end");
+
+                svgGenre.append("g").call(d3.axisLeft(yScaleGenre));
+
+                // Axis labels
+                svgGenre
+                    .append("text")
+                    .attr("transform", `translate(${width / 2}, -20)`) // Move just above the chart
+                    .style("text-anchor", "middle")
+                    .attr("class", "artist-chart-label")
+                    .text("Top 10 Most Popular Genres");
+
+                svgGenre
+                    .append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", 0 - margin.left)
+                    .attr("x", 0 - height / 2)
+                    .attr("dy", "1em")
+                    .style("text-anchor", "middle")
+                    .text("Number of Songs")
+                    .attr("class", "axis-label");
+            }
+
+            createGenreBars()
+
+            const svgGenreDefs = svgGenre.append("defs");
+            const gradient = svgGenreDefs.append("linearGradient")
+                .attr("id", "genre-gradient")
+                .attr("gradientUnits", "userSpaceOnUse") // This will define the gradient across the entire chart
+                .attr("x1", "0")
+                .attr("x2", "0")
+                .attr("y1", yScaleGenre(0))
+                .attr("y2", yScaleGenre(d3.max(sortedGenres, d => d[1].count)));
+
+            gradient.append("stop")
+                .attr("offset", "0%")
+                .attr("stop-color", "lightblue"); // Light color for smaller bars
+
+            gradient.append("stop")
+                .attr("offset", "100%")
+                .attr("stop-color", "blue"); // Dark color for larger bars
+
+            svgGenre.selectAll("rect")
+                .attr("fill", "url(#genre-gradient)");
+
+            // Most Popular Artists in Each Genre Chart
+            const artistChart = d3.select("#artist-chart");
+
+            // Create SVG container for artists
+            const svgArtist = artistChart
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            // Flatten the artist data for each genre
+            const flattenedArtists = sortedGenres.flatMap((d) =>
+                Array.from(d[1].artists.entries(), ([artist, popularity]) => ({
+                    genre: d[0],
+                    artist,
+                    popularity,
+                }))
+            );
+
+            // Calculate total popularity for each artist
+            const totalPopularityByArtist = flattenedArtists.reduce((acc, curr) => {
+                if (!acc[curr.artist]) {
+                    acc[curr.artist] = 0;
+                }
+                acc[curr.artist] += curr.popularity;
+                return acc;
+            }, {});
+
+            // Sort artists by total popularity and take the top 10
+            const top10OverallArtists = Object.entries(totalPopularityByArtist)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            // Create scales for artists
+            const xScaleArtist = d3
+                .scaleBand()
+                .domain(top10OverallArtists.map((d) => d[0]))
+                .range([0, width])
+                .padding(0.1);
+
+            const yScaleArtist = d3
+                .scaleLinear()
+                .domain([0, d3.max(top10OverallArtists, (d) => d[1])])
+                .range([height, 0]);
+                
+
+            function updateArtistLabel(genre) {
+                svgArtist.select(".artist-chart-label").remove();
+                const label = genre ? `Top 10 Most Popular ${genre} Artists` : `Top 10 Most Popular Artists`;
+                svgArtist
+                    .append("text")
+                    .attr("transform", `translate(${width / 2}, -20)`)
+                    .attr("text-anchor", "middle")
+                    .attr("class", "artist-chart-label")
+                    .text(label);
+            }
+
+            // Function to update the artist chart
+            function updateArtistChart(data, resetGenreChart = false) {
+                // Clear the previous chart completely
+                svgArtist.selectAll("*").remove();  // This line is updated to remove everything within the SVG
+
+                // Recreate the axes and bars within the svgArtist
+                svgArtist.append("g")
+                    .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+                // Create scales for the updated data
+                const xScaleArtist = d3
+                    .scaleBand()
+                    .domain(data.map(d => d.artist))
+                    .range([0, width])
+                    .padding(0.3);  // Increased padding for more space between bars
+
+                const yScaleArtist = d3
+                    .scaleLinear()
+                    .domain([0, d3.max(data, d => d.popularity)])
+                    .range([height, 0]);
+
+                // Define the gradient
+                const gradient = svgArtist.append("defs")
+                    .append("linearGradient")
+                    .attr("id", "gradient")
+                    .attr("x1", "0%")
+                    .attr("x2", "0%")
+                    .attr("y1", "100%")
+                    .attr("y2", "0%");
+                    gradient.append("stop")
+                    .attr("offset", "0%")
+                    .attr("stop-color", "#ffeda0");  // Light color for smaller bars
+                    gradient.append("stop")
+                    .attr("offset", "100%")
+                    .attr("stop-color", "#f03b20");  // Dark color for larger bars
+
+                const bars = svgArtist.selectAll("rect")
+                    .data(data, d => d[0]);
+
+
+                // Create bars for each artist
+                svgArtist.selectAll("rect")
+                    .data(data)
+                    .enter()
+                    .append("rect")
+                    .merge(bars)
+                    .transition()  // Add a transition for smoother update
+                    .duration(500)
+                    .attr("x", d => xScaleArtist(d.artist))
+                    .attr("y", d => yScaleArtist(d.popularity))
+                    .attr("width", xScaleArtist.bandwidth())
+                    .attr("height", d => height - yScaleArtist(d.popularity))
+                    .attr("fill", "url(#gradient)");  // Apply the gradient to the fill
+
+                svgArtist.selectAll("rect")
+                    .on("mouseover", function(event, d) {
+                        // Call updateGenreChart with the artist's name
+                
+                        d3.select(this)
+                            .style("stroke", "black")
+                            .style("stroke-width", "2px");
+                        updateGenreChart(d.artist);
+                    })
+                    .on("mouseout", function() {
+                        // Restore the original genre chart
+
+                        d3.select(this)
+                            .style("stroke", "none")
+                            .style("stroke-width", "0");
+                        
+                        updateGenreChart(null);
+                    });
+
+                // Add X and Y axes
+                svgArtist.append("g")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScaleArtist))
+                    .selectAll("text")
+                    .attr("transform", "rotate(-45)")
+                    .style("text-anchor", "end");
+
+                svgArtist.append("g")
+                    .call(d3.axisLeft(yScaleArtist));
+
+                svgArtist.select(".x-axis")
+                    .attr("transform", `translate(0, -10)`);
+
+                svgArtist
+                    .append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", 0 - margin.left)
+                    .attr("x", 0 - height / 2)
+                    .attr("dy", "1em")
+                    .style("text-anchor", "middle")
+                    .text("Total Popularity")
+                    .attr("class", "axis-label");
+
+                updateArtistLabel(null)
+
+            }
+
+            svgGenre.selectAll("rect")
+                .on("mouseover", function(event, d) {
+                    // Extract top artists for the selected genre
+                    d3.select(this)
+                        .style("stroke", "black")
+                        .style("stroke-width", "2px");
+
+                    const selectedGenre = d[0];
+                    const topArtists = Array.from(genreCounts.get(selectedGenre).artists)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([artist, count]) => ({artist, popularity: count}))
+                        .slice(0, 10);
+
+                    // Update artist chart with top artists for the selected genre
+                    updateArtistChart(topArtists);
+                    updateArtistLabel(d[0]);
+                })
+                .on("mouseout", function() {
+                    d3.select(this)
+                        .style("stroke", "none");
+                    // Restore the artist chart to show overall top artists
+                    updateArtistChart(top10OverallArtists.map(([artist, popularity]) => ({artist, popularity})), true);
+                    updateArtistLabel(null);
+                });
+
+            // Initialize the artist chart with overall top artists
+            updateArtistChart(top10OverallArtists.map(([artist, popularity]) => ({artist, popularity})));
+
+
+        });
+
+        
+    </script>
+</body>
+</html>
